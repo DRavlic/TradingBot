@@ -1,4 +1,4 @@
-name: tradingBot
+name: trading_bot
 dependencies:
     - python-binance
     - TA-Lib

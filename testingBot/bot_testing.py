@@ -2,6 +2,7 @@ import websocket, json, pprint, talib, numpy
 import config
 from binance.client import Client
 from binance.enums import *
+import time
 
 SOCKET="wss://stream.binance.com:9443/ws/btcbusd@kline_1m"
 
@@ -13,6 +14,7 @@ TRADE_QUANTITY = 0.0003
 MAX_BUYS = 29
 PROFIT_FACTOR = 1.0 / 1000.0
 MAX_BUY_AGE = 30
+MIN_SECONDS_BETWEEN_BUYS = 15
 
 prices = []
 list_of_buys = []
@@ -20,14 +22,14 @@ list_of_buys_str = []
 trade_results = []
 sum_of_profits = 0
 sum_of_old_age_buy_profits = 0
+last_order_time = time.time()
+
 
 client = Client(config.API_KEY, config.API_SECRET)
 
-## for hardcore TESTING
-import time
-MIN_SECONDS_BETWEEN_BUYS = 15
 
-last_order_time = time.time()
+##############
+#### Functions
 def minute_from_last_order(now1):
     global last_order_time
     if now1 - last_order_time > MIN_SECONDS_BETWEEN_BUYS:
@@ -35,11 +37,7 @@ def minute_from_last_order(now1):
         return True
     else:
         return False
-#######################################
 
-
-##############
-#### Functions
 def get_last_price(symbol):
     symbol_ticker = client.get_symbol_ticker(symbol=symbol)
     return float(symbol_ticker['price'])
@@ -115,7 +113,7 @@ def get_netto_price(symbol, side=None):
     else:
         price = get_last_price(TRADE_SYMBOL)
 
-    return (1 - maker_commission + taker_commission) * price
+    return (1 - maker_commission - taker_commission) * price
 
 
 def profitable_price_to_sell(symbol, side):
