@@ -4,6 +4,7 @@ from binance.client import Client
 from binance.enums import *
 import time
 import math
+import pandas as pd
 
 SOCKET="wss://stream.binance.com:9443/ws/hbarbusd@kline_1m"
 
@@ -19,7 +20,7 @@ RSI_OVERSOLD = 28
 # RSI_OVERSOLD = 39# 28
 
 TRADE_SYMBOL = 'HBARBUSD'
-TRADE_QUANTITY = 40
+TRADE_QUANTITY = 70
 LOT_STEP = 0
 
 MAX_PROFIT_FACTOR = 1.0 / 700.0
@@ -28,9 +29,11 @@ OLD_PROFIT_FACTOR = -MAX_PROFIT_FACTOR
 REALLY_OLD_PROFIT_FACTOR = -4.0 * MAX_PROFIT_FACTOR
 
 MAX_BUY_AGE = 100
-REALLY_OLD_BUY_AGE = 300
-MAX_BUYS = 55
+REALLY_OLD_BUY_AGE = 250
+MAX_BUYS = 25
 MIN_SECONDS_BETWEEN_BUYS = 15
+
+EMA_WINDOW = 18
 
 
 prices = []
@@ -71,10 +74,10 @@ def get_profit_factor_by_age(age):
 ##############
 #### Setup
 trade_fee = client.get_trade_fee(symbol=TRADE_SYMBOL)
-MAKER_COMMISION = float(trade_fee[0]['makerCommission'])
-TAKER_COMMISION = float(trade_fee[0]['takerCommission'])
-TOTAL_COMMISION = MAKER_COMMISION + TAKER_COMMISION
-TRADE_QUANTITY_SELL = truncate((1 - TOTAL_COMMISION) * TRADE_QUANTITY, LOT_STEP)
+MAKER_COMMISSION = float(trade_fee[0]['makerCommission'])
+TAKER_COMMISSION = float(trade_fee[0]['takerCommission'])
+TOTAL_COMMISSION = TAKER_COMMISSION # + MAKER_COMMISSION 
+TRADE_QUANTITY_SELL = truncate((1 - TOTAL_COMMISSION) * TRADE_QUANTITY, LOT_STEP)
 
 
 ##############
@@ -131,6 +134,18 @@ def update_str_list():
         list_of_buys_str += [str(buy[0]) + ", " + str(buy[1]) + "\n"]
 
 
+def get_real_bought_price_per_coin(bought_price):
+    return bought_price / (1 - TOTAL_COMMISSION)
+
+
+def price_is_below_ema(last_price):
+    global prices
+    last_ema_window_prices = prices[-EMA_WINDOW:]
+    ema_pandas = talib.EMA(pd.Series(last_ema_window_prices), EMA_WINDOW)
+    ema_value = ema_pandas[ema_pandas.size - 1]
+    return round(ema_value, 4) > last_price
+
+
 def add_to_list(price):
     global list_of_buys, list_of_buys_str
     list_of_buys += [[price, 0]]
@@ -154,7 +169,7 @@ def update_lists_after_succesful_sell(bought_price, netto_sold_price):
 
 
 def get_netto_price(price):
-    return (1 - TOTAL_COMMISION) * price
+    return (1 - TOTAL_COMMISSION) * price
 
 
 def get_expected_netto_sell_price(symbol, side=None):
@@ -190,16 +205,6 @@ def profitable_price_to_sell(symbol, side):
             return buy, expected_netto_sell_price
 
     return None, expected_netto_sell_price
-
-
-def get_oldest_buy_older_than(max_buy_age):
-    global list_of_buys
-    oldest_buy = max(list_of_buys, key=lambda x: x[1])
-
-    if oldest_buy[1] > max_buy_age:
-        return oldest_buy
-
-    return None
 
 
 def update_buy_age_in_minutes():
@@ -267,26 +272,20 @@ def on_message(ws, message):
                         print("Success!! Bought: {:.4f}, NettoSold: {:.4f} ---> profit: {:.3f}\n".format(profitable_bought_price[0], netto_sold_price, (netto_sold_price - profitable_bought_price[0]) * TRADE_QUANTITY_SELL))
                 else:
                     print("It is overbought, but it is not profitable for us :(")
-
-                # oldest_buy = get_oldest_buy_older_than(MAX_BUY_AGE)
-                # if oldest_buy is not None:
-                #     print("Need to sell old buy... Sell :(")
-                #     order_succeeded, sold_price = order(SIDE_SELL, TRADE_SYMBOL)
-                #     if order_succeeded:
-                #         list_of_buys.remove(oldest_buy)
-                #         netto_sold_price = get_netto_price(sold_price)
-                #         update_lists_after_succesful_sell(oldest_buy, netto_sold_price)
-                #         print("We made an old trade :S, Bought: {:.4f}, NettoSold: {:.4f} ---> profit: {:.3f}\n".format(oldest_buy[0], netto_sold_price, (netto_sold_price - oldest_buy[0]) * TRADE_QUANTITY_SELL))
-
             else:
                 print("It is overbought, but we don't own any. Nothing to do.")
-            
-        if rsi < RSI_OVERSOLD and minute_from_last_order(time.time()):
+        
+        is_price_below_ema = False
+        if len(prices) > EMA_WINDOW:
+            is_price_below_ema = price_is_below_ema(last_price)
+
+        if rsi < RSI_OVERSOLD and minute_from_last_order(time.time()) and is_price_below_ema:
             if get_number_of_buys_in_queue() < MAX_BUYS:
                 print("Oversold! Buy! Buy! Buy!")
                 order_succeeded, bought_price = order(SIDE_BUY, TRADE_SYMBOL)
+                real_bought_price_per_coin = get_real_bought_price_per_coin(bought_price)
                 if order_succeeded:
-                    add_to_list(bought_price)
+                    add_to_list(real_bought_price_per_coin)
             else:
                 print("It is oversold, but you already own enough of it, nothing to do.")
 
@@ -299,7 +298,7 @@ def on_message(ws, message):
 #### Main
 
 ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
-ws.run_forever()
+ws.run_forever(ping_timeout=30)
 
 trade_results += ['Profit at the end: {}\n'.format(sum_of_profits)]
 trade_results += ['Income at the end: {}\n'.format(sum_of_profits - sum_of_old_age_profits)]
