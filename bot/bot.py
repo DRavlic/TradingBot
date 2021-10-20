@@ -1,10 +1,12 @@
 import websocket, json, pprint, talib, numpy
-import config
 from binance.client import Client
 from binance.enums import *
 import time
 import math
 import pandas as pd
+import sys
+sys.path.append('../')
+import config
 
 SOCKET="wss://stream.binance.com:9443/ws/hbarbusd@kline_1m"
 
