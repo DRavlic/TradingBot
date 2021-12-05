@@ -1,8 +1,10 @@
-from enum import IntEnum
-# from binance.client import Client
+import json
 import pandas as pd
 import plotly.graph_objects as go
+
+from enum import IntEnum
 from plotly.subplots import make_subplots
+
 
 ###################
 #### CONSTANTS ####
@@ -12,11 +14,10 @@ UTC_TO_CET_OFFSET = 1
 INVALID_CANDLESTICK_VALUE = -1
 
 
-
 ###################
 ##### CLASSES #####
 ###################
-class HistKline(IntEnum):
+class BinanceKline(IntEnum):
     OPEN_TIME = 0
     OPEN = 1
     HIGH = 2
@@ -37,23 +38,20 @@ class Candlestick():
     sell_order_price = INVALID_CANDLESTICK_VALUE
 
 
-
 ###################
 #### FUNCTIONS ####
 ###################
-def get_historical_binance_klines(client, symbol, interval, days, utc_offset=UTC_TO_CET_OFFSET):
-    """Get historical Binance Klines for desired symbol in recent days
+def get_historical_binance_klines(client, symbol, interval, days):
+    """Get historical Binance Klines for desired symbol in recent days with UTC timezone dates
 
-    :param client: client with Binance private and public API keys
-    :type client: Client from Binance API
+    :param client: Client with Binance private and public API keys
+    :type client: client from Binance API
     :param symbol: Name of symbol pair e.g BNBBTC
     :type symbol: str
     :param interval: Binance Kline interval eg. minute, hour, day etc.
     :type interval: str
-    :param days: number of recent days with historical data
+    :param days: Number of recent days with historical data
     :type days: int
-    :param utc_offset: desired offset from UTC timezone
-    :type utc_offset: int
 
     :return: List of klines where every kline contains the following example data:
     [
@@ -72,14 +70,16 @@ def get_historical_binance_klines(client, symbol, interval, days, utc_offset=UTC
     ]   
     """
 
-    return client.get_historical_klines(symbol, interval, "{} days ago UTC+{}".format(days, utc_offset))
+    return client.get_historical_klines(symbol, interval, "{} days ago UTC".format(days))
 
 
-def get_candlesticks_from_binance_klines(klines):
+def get_candlesticks_from_binance_klines(klines, utc_offset=UTC_TO_CET_OFFSET):
     """ Get list of Candlestick objects from Binance Klines
     
-    :param klines: special Binance representation of candlesticks obtained from get_historical_klines API function
+    :param klines: Special Binance representation of candlesticks obtained from get_historical_klines API function
     :type klines: Binance klines - presented in get_historical_binance_klines function
+    :param utc_offset: Desired offset from UTC timezone, default value 1
+    :type utc_offset: int
 
     :return: list of Candlestick objects
     """
@@ -87,26 +87,65 @@ def get_candlesticks_from_binance_klines(klines):
     candlesticks = []
     for kline in klines:
         candlestick = Candlestick()
-        candlestick.open   = float(kline[HistKline.OPEN  ])
-        candlestick.high   = float(kline[HistKline.HIGH  ])
-        candlestick.low    = float(kline[HistKline.LOW   ])
-        candlestick.close  = float(kline[HistKline.CLOSE ])
-        candlestick.volume = float(kline[HistKline.VOLUME])
-        candlestick.open_time  = kline[HistKline.OPEN_TIME ]
-        candlestick.close_time = kline[HistKline.CLOSE_TIME]
+        candlestick.open   = float(kline[BinanceKline.OPEN  ])
+        candlestick.high   = float(kline[BinanceKline.HIGH  ])
+        candlestick.low    = float(kline[BinanceKline.LOW   ])
+        candlestick.close  = float(kline[BinanceKline.CLOSE ])
+        candlestick.volume = float(kline[BinanceKline.VOLUME])
+        candlestick.open_time  = pd.to_datetime(float(kline[BinanceKline.OPEN_TIME ]) + utc_offset * HOUR_IN_MS, unit='ms')
+        candlestick.close_time = pd.to_datetime(float(kline[BinanceKline.CLOSE_TIME]) + utc_offset * HOUR_IN_MS, unit='ms')
 
         candlesticks += [candlestick]
 
     return candlesticks
 
 
-def visualize_trade(candlesticks, utc_offset=UTC_TO_CET_OFFSET):
+def get_candlestick_from_binance_stream_message(stream_message, utc_offset=UTC_TO_CET_OFFSET):
+    """ Get Candlestick object from binance stream message
+
+    :param stream_message: Binance API stream message
+    :type stream_message: Binance stream
+    :param utc_offset: Desired offset from UTC timezone, default value 1
+    :type utc_offset: int
+
+    :return: Candlestick object
+    """
+
+    json_message = json.loads(stream_message)
+    candle = json_message['k']
+
+    candlestick = Candlestick()
+    candlestick.open   = float(candle['o'])
+    candlestick.high   = float(candle['h'])
+    candlestick.low    = float(candle['l'])
+    candlestick.close  = float(candle['c'])
+    candlestick.volume = float(candle['v'])
+    candlestick.open_time  = pd.to_datetime(float(candle['t']) + utc_offset * HOUR_IN_MS, unit='ms')
+    candlestick.close_time = pd.to_datetime(float(candle['T']) + utc_offset * HOUR_IN_MS, unit='ms')
+
+    return candlestick
+
+
+def is_candlestick_from_binance_stream_message_closed(stream_message):
+    """ Get information whether candlestick from stream message is at closed (final) state
+
+    :param stream_message: Binance API stream message
+    :type stream_message: Binance stream
+
+    :return: bool
+    """
+    json_message = json.loads(stream_message)
+    candle = json_message['k']
+
+    return candle['x']
+
+
+
+def visualize_trade(candlesticks):
     """Get candlesticks figure from list of Candlestick object with buy/sell orders visualization if they exist
 
-    :param candlesticks: list of CandleStick objects
+    :param candlesticks: List of CandleStick objects
     :type candlesticks: Python list
-    :param utc_offset: desired offset from UTC timezone
-    :type utc_offset: int
     """
 
     open_time = []
@@ -124,7 +163,7 @@ def visualize_trade(candlesticks, utc_offset=UTC_TO_CET_OFFSET):
         high += [candlestick.high]
         low += [candlestick.low]
         close += [candlestick.close]
-        open_time += [pd.to_datetime(candlestick.open_time + utc_offset * HOUR_IN_MS, unit='ms')]
+        open_time += [candlestick.open_time]
         
         if candlestick.buy_order_price != INVALID_CANDLESTICK_VALUE:
             buy_orders += [candlestick.buy_order_price]
