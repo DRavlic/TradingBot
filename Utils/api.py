@@ -85,3 +85,25 @@ def get_month_stream(symbol, interval):
         raise BaseException("Wrong month interval. Check inputs of get_month_stream function!")
 
     return STREAM_LINK + symbol.lower() + "@kline_{}M".format(interval)
+
+
+def on_open(ws):
+    """
+    Do when Binance connection is opened
+
+    :param ws: websocket
+    :type ws: Binance WebSocketApp
+    """
+
+    print("Opened connection!\n")
+
+
+def on_close(ws):
+    """
+    Do when Binance connection is closed
+
+    :param ws: websocket
+    :type ws: Binance WebSocketApp
+    """
+
+    print("Closed connection!\n")

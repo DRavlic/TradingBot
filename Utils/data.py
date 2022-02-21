@@ -27,15 +27,51 @@ class BinanceKline(IntEnum):
     CLOSE_TIME = 6
 
 class Candlestick():
-    open_time = INVALID_CANDLESTICK_VALUE
-    open = INVALID_CANDLESTICK_VALUE
-    high = INVALID_CANDLESTICK_VALUE
-    low = INVALID_CANDLESTICK_VALUE
-    close = INVALID_CANDLESTICK_VALUE
-    volume = INVALID_CANDLESTICK_VALUE
-    close_time = INVALID_CANDLESTICK_VALUE
-    buy_order_price = INVALID_CANDLESTICK_VALUE
+    open_time        = INVALID_CANDLESTICK_VALUE
+    open             = INVALID_CANDLESTICK_VALUE
+    high             = INVALID_CANDLESTICK_VALUE
+    low              = INVALID_CANDLESTICK_VALUE
+    close            = INVALID_CANDLESTICK_VALUE
+    volume           = INVALID_CANDLESTICK_VALUE
+    close_time       = INVALID_CANDLESTICK_VALUE
+    buy_order_price  = INVALID_CANDLESTICK_VALUE
     sell_order_price = INVALID_CANDLESTICK_VALUE
+
+    def get_open_time(self):
+        return self.open_time
+    
+    def get_open(self):
+        return self.open
+    
+    def get_high(self):
+        return self.high
+    
+    def get_low(self):
+        return self.low
+    
+    def get_close(self):
+        return self.close
+    
+    def get_volume(self):
+        return self.volume
+
+    def get_close_time(self):
+        return self.close_time
+
+    def get_buy_order_price(self):
+        return self.buy_order_price
+
+    def get_sell_order_price(self):
+        return self.sell_order_price
+
+    def get_hl2(self):
+        return (self.high + self.low) / 2.0
+
+    def get_hlc3(self):
+        return (self.high + self.low + self.close) / 3.0
+
+    def get_ohlc4(self):
+        return (self.open + self.high + self.low + self.close) / 4.0
 
 
 ###################
@@ -159,22 +195,22 @@ def visualize_trade(candlesticks):
     sell_orders_str = []
 
     for candlestick in candlesticks:
-        open += [candlestick.open]
-        high += [candlestick.high]
-        low += [candlestick.low]
-        close += [candlestick.close]
-        open_time += [candlestick.open_time]
+        open += [candlestick.get_high()]
+        high += [candlestick.get_high()]
+        low += [candlestick.get_low()]
+        close += [candlestick.get_close()]
+        open_time += [candlestick.get_open_time()]
         
-        if candlestick.buy_order_price != INVALID_CANDLESTICK_VALUE:
-            buy_orders += [candlestick.buy_order_price]
-            buy_orders_str += ["Buy at: {:.5f}".format(candlestick.buy_order_price)]
+        if candlestick.get_buy_order_price() != INVALID_CANDLESTICK_VALUE:
+            buy_orders += [candlestick.get_buy_order_price()]
+            buy_orders_str += ["Buy at: {:.5f}".format(candlestick.get_buy_order_price())]
         else:
             buy_orders += [None]
             buy_orders_str += [None]
         
-        if candlestick.sell_order_price != INVALID_CANDLESTICK_VALUE:
-            sell_orders += [candlestick.sell_order_price]
-            sell_orders_str += ["Sell at: {:.5f}".format(candlestick.sell_order_price)]
+        if candlestick.get_sell_order_price() != INVALID_CANDLESTICK_VALUE:
+            sell_orders += [candlestick.get_sell_order_price()]
+            sell_orders_str += ["Sell at: {:.5f}".format(candlestick.get_sell_order_price())]
         else:
             sell_orders += [None]
             sell_orders_str += [None]
